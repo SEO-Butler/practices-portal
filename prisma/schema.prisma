@@ -1,0 +1,81 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+}
+
+enum PracticeStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TokenType {
+  VERIFY
+  RESET
+}
+
+model User {
+  id              String       @id @default(cuid())
+  email           String       @unique
+  passwordHash    String
+  role            Role         @default(OWNER)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  practice        Practice?
+  emailTokens     EmailToken[]
+}
+
+model Practice {
+  id              String         @id @default(cuid())
+  publicId        String         @unique
+  ownerId         String         @unique
+  owner           User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  status          PracticeStatus @default(DRAFT)
+  region          String
+  practiceName    String?
+  doctorName      String?
+  specialty       String?
+  phone           String?
+  email           String?
+  address         String?
+  hours           String?
+  about           String?
+  logoUrl         String?
+  photoUrl        String?
+  rejectionReason String?
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([status])
+}
+
+model EmailToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      TokenType
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model RegionCounter {
+  region     String @id
+  lastNumber Int    @default(0)
+}
