@@ -5,7 +5,12 @@ import {
   createSessionToken,
   verifySessionToken,
   homePathFor,
+  generateEmailToken,
+  hashEmailToken,
 } from "./auth";
+import { signWebhookBody } from "./notify";
+
+vi.mock("@/lib/db", () => ({ prisma: {} }));
 
 afterEach(() => vi.useRealTimers());
 
@@ -58,6 +63,26 @@ describe("session tokens", () => {
     const token = createSessionToken({ sub: "u", role: "NURSE" }, 60);
     vi.setSystemTime(new Date("2026-01-01T00:02:00Z"));
     expect(verifySessionToken(token)).toBeNull();
+  });
+});
+
+describe("email tokens", () => {
+  it("stores only a hash that matches the raw token", () => {
+    const { raw, hash } = generateEmailToken();
+    expect(hash).toBe(hashEmailToken(raw));
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(raw).not.toContain(hash);
+    expect(generateEmailToken().hash).not.toBe(hash); // unique per call
+  });
+});
+
+describe("webhook signature", () => {
+  it("is a deterministic HMAC-SHA256 hex digest", () => {
+    const sig = signWebhookBody('{"a":1}', "secret");
+    expect(sig).toBe(signWebhookBody('{"a":1}', "secret"));
+    expect(sig).toMatch(/^[0-9a-f]{64}$/);
+    expect(signWebhookBody('{"a":2}', "secret")).not.toBe(sig);
+    expect(signWebhookBody('{"a":1}', "other")).not.toBe(sig);
   });
 });
 

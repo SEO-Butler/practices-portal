@@ -40,5 +40,11 @@ export async function POST(request: Request) {
   const store = await cookies();
   store.set(SESSION_COOKIE, token, sessionCookieOptions());
 
-  return NextResponse.json({ role, home: homePathFor(role) });
+  return NextResponse.json({
+    role,
+    home: user.mustChangePassword
+      ? "/account/password?required=1"
+      : homePathFor(role),
+    mustChangePassword: user.mustChangePassword,
+  });
 }

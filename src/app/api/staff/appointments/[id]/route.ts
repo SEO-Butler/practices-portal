@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireStaff } from "@/lib/session";
 import { STAFF_ROLES } from "@/lib/auth";
+import { notify } from "@/lib/notify";
 import {
   ACTION_TO,
   canPerformAction,
@@ -84,6 +85,10 @@ export async function PATCH(
 
   const appointment = await prisma.appointment.findFirst({
     where: { id, practiceId: guard.staff.practiceId },
+    include: {
+      patient: { select: { phone: true, user: { select: { id: true, email: true } } } },
+      practice: { select: { practiceName: true, publicId: true } },
+    },
   });
   if (!appointment) {
     return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
@@ -96,6 +101,8 @@ export async function PATCH(
   }
 
   const now = new Date();
+  const practiceName = appointment.practice.practiceName ?? "your practice";
+  const patientUser = appointment.patient.user;
 
   if (action === "check_in") {
     // Assign the next queue number for this practice today, atomically.
@@ -118,6 +125,15 @@ export async function PATCH(
         },
       });
     });
+    await notify({
+      userId: patientUser.id,
+      type: "QUEUE_CHECKED_IN",
+      channel: "SMS",
+      recipient: appointment.patient.phone,
+      title: `You are number ${updated.queueNumber} in the queue`,
+      body: `Checked in at ${practiceName}. Your queue number is ${updated.queueNumber}. Follow the live queue at /waiting-room.`,
+      data: { appointmentId: id, queueNumber: updated.queueNumber },
+    });
     return NextResponse.json({ appointment: updated });
   }
 
@@ -137,5 +153,53 @@ export async function PATCH(
         : {}),
     },
   });
+
+  const when = appointment.scheduledAt.toLocaleString();
+  if (action === "confirm") {
+    await notify({
+      userId: patientUser.id,
+      type: "BOOKING_CONFIRMED",
+      channel: "EMAIL",
+      recipient: patientUser.email,
+      title: "Appointment confirmed",
+      body: `Your appointment at ${practiceName} on ${when} is confirmed.`,
+      data: { appointmentId: id },
+    });
+  } else if (action === "cancel") {
+    await notify({
+      userId: patientUser.id,
+      type: "BOOKING_CANCELLED",
+      channel: "EMAIL",
+      recipient: patientUser.email,
+      title: "Appointment cancelled",
+      body: `Your appointment at ${practiceName} on ${when} was cancelled by the practice. Please rebook or contact us.`,
+      data: { appointmentId: id },
+    });
+  } else if (action === "start_consult") {
+    // Tell the next waiting patient they're up.
+    const next = await prisma.appointment.findFirst({
+      where: {
+        practiceId: guard.staff.practiceId,
+        status: "CHECKED_IN",
+        id: { not: id },
+      },
+      orderBy: { queueNumber: "asc" },
+      include: {
+        patient: { select: { phone: true, user: { select: { id: true } } } },
+      },
+    });
+    if (next) {
+      await notify({
+        userId: next.patient.user.id,
+        type: "QUEUE_NEXT",
+        channel: "SMS",
+        recipient: next.patient.phone,
+        title: "You're next",
+        body: `You are next in the queue at ${practiceName} (number ${next.queueNumber}). Please stay close to the consultation rooms.`,
+        data: { appointmentId: next.id, queueNumber: next.queueNumber },
+      });
+    }
+  }
+
   return NextResponse.json({ appointment: updated });
 }

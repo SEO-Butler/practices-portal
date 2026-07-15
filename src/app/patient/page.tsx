@@ -3,6 +3,7 @@ import { AppShell } from "@/components/shell";
 import { requirePage } from "@/lib/page-guard";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/status-badge";
+import { VerifyBanner } from "@/components/verify-banner";
 
 export const metadata = { title: "My dashboard" };
 export const dynamic = "force-dynamic";
@@ -10,6 +11,10 @@ export const dynamic = "force-dynamic";
 export default async function PatientDashboard() {
   const session = await requirePage(["PATIENT"]);
 
+  const user = await prisma.user.findUnique({
+    where: { id: session.sub },
+    select: { emailVerifiedAt: true },
+  });
   const patient = await prisma.patientProfile.findUnique({
     where: { userId: session.sub },
     include: {
@@ -39,6 +44,7 @@ export default async function PatientDashboard() {
 
   return (
     <AppShell title={`Hello, ${patient.firstName}`}>
+      {user && !user.emailVerifiedAt && <VerifyBanner />}
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">

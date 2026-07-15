@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requirePatient } from "@/lib/session";
+import { notify } from "@/lib/notify";
+import { resolveBooking, ACTIVE_APPOINTMENT_STATUSES } from "@/lib/slots";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,9 @@ export async function GET() {
   return NextResponse.json({ appointments });
 }
 
-// Online booking: creates a REQUESTED appointment for reception to confirm.
+// Online booking. The requested time must be an open slot generated from the
+// doctors' availability rules; the doctor is auto-assigned when not chosen.
+// Creates a REQUESTED appointment for reception to confirm.
 export async function POST(request: Request) {
   const guard = await requirePatient();
   if (!guard.ok) return guard.response;
@@ -33,7 +37,8 @@ export async function POST(request: Request) {
   }
 
   const practiceId = typeof body.practiceId === "string" ? body.practiceId : "";
-  const doctorId = typeof body.doctorId === "string" && body.doctorId ? body.doctorId : null;
+  const requestedDoctorId =
+    typeof body.doctorId === "string" && body.doctorId ? body.doctorId : null;
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
   const scheduledAtRaw = typeof body.scheduledAt === "string" ? body.scheduledAt : "";
 
@@ -50,38 +55,89 @@ export async function POST(request: Request) {
 
   const practice = await prisma.practice.findFirst({
     where: { id: practiceId, status: "APPROVED" },
-    select: { id: true },
+    select: { id: true, practiceName: true, publicId: true },
   });
   if (!practice) {
     return NextResponse.json({ error: "Practice not found" }, { status: 404 });
   }
 
-  if (doctorId) {
-    const doctor = await prisma.staffProfile.findFirst({
-      where: { id: doctorId, practiceId, user: { role: "DOCTOR" } },
-      select: { id: true },
-    });
-    if (!doctor) {
-      return NextResponse.json(
-        { error: "Doctor not found at this practice" },
-        { status: 400 },
-      );
-    }
-  }
-
-  const appointment = await prisma.appointment.create({
-    data: {
-      practiceId,
-      patientId: guard.patient.id,
-      doctorId,
-      scheduledAt,
-      reason,
-    },
-    include: {
-      practice: { select: { practiceName: true } },
-      doctor: { select: { title: true, firstName: true, lastName: true } },
+  const rules = await prisma.availabilityRule.findMany({
+    where: {
+      doctor: {
+        practiceId,
+        ...(requestedDoctorId ? { id: requestedDoctorId } : {}),
+      },
+      weekday: scheduledAt.getDay(),
     },
   });
+  if (rules.length === 0) {
+    return NextResponse.json(
+      { error: "No bookable hours on that day. Please pick another date." },
+      { status: 400 },
+    );
+  }
 
-  return NextResponse.json({ appointment }, { status: 201 });
+  const dayStart = new Date(scheduledAt);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+  // Validate the slot and (re-)check the conflict inside one transaction so
+  // two simultaneous bookings can't take the same doctor + time.
+  let created;
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      const busy = await tx.appointment.findMany({
+        where: {
+          practiceId,
+          scheduledAt: { gte: dayStart, lt: dayEnd },
+          status: { in: [...ACTIVE_APPOINTMENT_STATUSES] },
+        },
+        select: { doctorId: true, scheduledAt: true },
+      });
+      const resolved = resolveBooking(
+        rules,
+        requestedDoctorId,
+        scheduledAt,
+        busy,
+        new Date(),
+      );
+      if (!resolved.ok) throw new SlotError(resolved.error);
+
+      return tx.appointment.create({
+        data: {
+          practiceId,
+          patientId: guard.patient.id,
+          doctorId: resolved.doctorId,
+          scheduledAt,
+          reason,
+        },
+        include: {
+          practice: { select: { practiceName: true } },
+          doctor: { select: { title: true, firstName: true, lastName: true } },
+        },
+      });
+    });
+  } catch (err) {
+    if (err instanceof SlotError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
+    throw err;
+  }
+
+  await notify({
+    userId: guard.session.sub,
+    type: "BOOKING_REQUESTED",
+    channel: "EMAIL",
+    recipient: (await prisma.user.findUnique({
+      where: { id: guard.session.sub },
+      select: { email: true },
+    }))?.email,
+    title: "Booking request received",
+    body: `Your booking at ${created.practice.practiceName ?? "the practice"} on ${scheduledAt.toLocaleString()} was received and is awaiting confirmation.`,
+    data: { appointmentId: created.id },
+  });
+
+  return NextResponse.json({ appointment: created }, { status: 201 });
 }
+
+class SlotError extends Error {}

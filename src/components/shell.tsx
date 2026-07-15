@@ -9,6 +9,7 @@ const NAV: Partial<Record<SessionRole, Array<{ href: string; label: string }>>> 
     { href: "/patient/book", label: "Book" },
     { href: "/patient/cases", label: "My cases" },
     { href: "/patient/vitals", label: "My vitals" },
+    { href: "/patient/alerts", label: "Alerts" },
     { href: "/patient/profile", label: "Profile" },
   ],
   RECEPTIONIST: [

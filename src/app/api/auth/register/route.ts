@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { createSessionToken, hashPassword, SESSION_COOKIE } from "@/lib/auth";
 import { sessionCookieOptions } from "@/lib/session";
 import { EMAIL_RE, validPassword } from "@/lib/clinic";
+import { issueEmailToken } from "@/lib/email-tokens";
+import { appUrl } from "@/lib/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +58,10 @@ export async function POST(request: Request) {
       },
     },
   });
+
+  // Verification link goes out via the notification pipeline (webhook or
+  // simulated); registration itself never blocks on it.
+  await issueEmailToken(user, "VERIFY", appUrl(request));
 
   const token = createSessionToken({ sub: user.id, role: "PATIENT" });
   const store = await cookies();

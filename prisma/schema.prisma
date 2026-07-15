@@ -30,18 +30,20 @@ enum TokenType {
 }
 
 model User {
-  id              String          @id @default(cuid())
-  email           String          @unique
-  passwordHash    String
-  role            Role            @default(OWNER)
-  emailVerifiedAt DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  practice        Practice?
-  emailTokens     EmailToken[]
-  patientProfile  PatientProfile?
-  staffProfile    StaffProfile?
-  vitalsRecorded  VitalsRecord[]  @relation("VitalsRecordedBy")
+  id                 String          @id @default(cuid())
+  email              String          @unique
+  passwordHash       String
+  role               Role            @default(OWNER)
+  emailVerifiedAt    DateTime?
+  mustChangePassword Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  practice           Practice?
+  emailTokens        EmailToken[]
+  patientProfile     PatientProfile?
+  staffProfile       StaffProfile?
+  vitalsRecorded     VitalsRecord[]  @relation("VitalsRecordedBy")
+  notifications      Notification[]
 }
 
 model Practice {
@@ -140,9 +142,10 @@ model StaffProfile {
   practice     Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   firstName    String
   lastName     String
-  title        String? // e.g. "Dr" or "Sr"; shown on public queue for doctors
-  specialty    String?
-  appointments Appointment[] @relation("DoctorAppointments")
+  title             String? // e.g. "Dr" or "Sr"; shown on public queue for doctors
+  specialty         String?
+  appointments      Appointment[]      @relation("DoctorAppointments")
+  availabilityRules AvailabilityRule[]
 
   @@index([practiceId])
 }
@@ -159,10 +162,11 @@ model Appointment {
   reason       String
   status       AppointmentStatus @default(REQUESTED)
   queueNumber  Int? // assigned at check-in; drives the waiting-room order
-  checkedInAt  DateTime?
-  startedAt    DateTime?
-  completedAt  DateTime?
-  cancelReason String?
+  checkedInAt    DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  cancelReason   String?
+  reminderSentAt DateTime?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   case         MedicalCase?
@@ -218,4 +222,54 @@ model VitalsRecord {
   @@index([patientId])
   @@index([caseId])
   @@index([appointmentId])
+}
+
+// Weekly recurring bookable hours for a doctor. Slots are generated from
+// these rules; bookings must land exactly on a generated slot.
+model AvailabilityRule {
+  id          String       @id @default(cuid())
+  doctorId    String
+  doctor      StaffProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  weekday     Int // 0 = Sunday … 6 = Saturday
+  startMinute Int // minutes since midnight, practice-local
+  endMinute   Int
+  slotMinutes Int          @default(30)
+  createdAt   DateTime     @default(now())
+
+  @@index([doctorId, weekday])
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SIMULATED
+  SENT
+  FAILED
+}
+
+// Every outbound notification event. Delivered to WEBHOOK_URL when
+// configured (a 3rd-party integration does the actual email/SMS), otherwise
+// marked SIMULATED. Also serves as the user's in-app alerts feed.
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // e.g. BOOKING_CONFIRMED, QUEUE_NEXT, EMAIL_VERIFY
+  channel   NotificationChannel
+  recipient String? // email address / phone number for the webhook consumer
+  title     String
+  body      String
+  data      Json?
+  status    NotificationStatus  @default(PENDING)
+  error     String?
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, createdAt])
 }

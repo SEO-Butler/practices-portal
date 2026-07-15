@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
+import { AvailabilityPanel } from "./availability-panel";
 
 interface Stats {
   today: Record<string, number>;
@@ -188,6 +189,15 @@ export function ManagerClient() {
           </button>
         </form>
       </div>
+
+      <AvailabilityPanel
+        doctors={(staff ?? [])
+          .filter((s) => s.user.role === "DOCTOR")
+          .map((s) => ({
+            id: s.id,
+            name: `${s.title ? s.title + " " : ""}${s.firstName} ${s.lastName}`,
+          }))}
+      />
     </div>
   );
 }

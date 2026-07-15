@@ -3,6 +3,7 @@ import {
   randomBytes,
   timingSafeEqual,
   createHmac,
+  createHash,
 } from "crypto";
 
 // Pure-node auth primitives (no Next.js imports) so they stay unit-testable
@@ -103,6 +104,19 @@ export function verifySessionToken(token: string): SessionPayload | null {
 }
 
 export const SESSION_COOKIE = "pp_session";
+
+/**
+ * One-time email tokens (verify / password reset). Only the SHA-256 hash is
+ * stored; the raw token goes into the emailed link.
+ */
+export function generateEmailToken(): { raw: string; hash: string } {
+  const raw = randomBytes(32).toString("base64url");
+  return { raw, hash: hashEmailToken(raw) };
+}
+
+export function hashEmailToken(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
 
 export const STAFF_ROLES: SessionRole[] = [
   "MANAGER",

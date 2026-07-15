@@ -62,9 +62,10 @@ async function main() {
     ["doctor2@demo.practicesportal.test", "DOCTOR", "Erik", "Louw", "Dr", "Pediatrics"],
   ];
 
+  const staffProfiles = {};
   for (const [email, role, firstName, lastName, title, specialty] of staff) {
     const user = await upsertUser(email, role);
-    await prisma.staffProfile.upsert({
+    staffProfiles[email] = await prisma.staffProfile.upsert({
       where: { userId: user.id },
       update: {},
       create: {
@@ -76,6 +77,30 @@ async function main() {
         specialty,
       },
     });
+  }
+
+  // Weekly bookable hours: Dr Amupolo Mon–Fri 08:00–17:00 (30-min slots),
+  // Dr Louw Mon–Fri 08:00–13:00 (20-min slots).
+  const schedules = [
+    ["doctor@demo.practicesportal.test", 8 * 60, 17 * 60, 30],
+    ["doctor2@demo.practicesportal.test", 8 * 60, 13 * 60, 20],
+  ];
+  for (const [email, startMinute, endMinute, slotMinutes] of schedules) {
+    const doctor = staffProfiles[email];
+    const existing = await prisma.availabilityRule.count({
+      where: { doctorId: doctor.id },
+    });
+    if (existing === 0) {
+      await prisma.availabilityRule.createMany({
+        data: [1, 2, 3, 4, 5].map((weekday) => ({
+          doctorId: doctor.id,
+          weekday,
+          startMinute,
+          endMinute,
+          slotMinutes,
+        })),
+      });
+    }
   }
 
   const patientUser = await upsertUser("patient@demo.practicesportal.test", "PATIENT");

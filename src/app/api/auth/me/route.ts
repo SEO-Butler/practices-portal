@@ -16,6 +16,8 @@ export async function GET() {
       id: true,
       email: true,
       role: true,
+      emailVerifiedAt: true,
+      mustChangePassword: true,
       patientProfile: { select: { firstName: true, lastName: true } },
       staffProfile: {
         select: { firstName: true, lastName: true, practiceId: true },
@@ -31,6 +33,8 @@ export async function GET() {
       role: user.role,
       name: profile ? `${profile.firstName} ${profile.lastName}` : user.email,
       home: homePathFor(session.role),
+      emailVerified: user.emailVerifiedAt !== null,
+      mustChangePassword: user.mustChangePassword,
     },
   });
 }

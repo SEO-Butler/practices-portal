@@ -75,6 +75,8 @@ export async function POST(request: Request) {
       email,
       passwordHash: hashPassword(body.password),
       role: role as (typeof STAFF_CREATABLE)[number],
+      // Temporary password issued by the manager — force a change on first login.
+      mustChangePassword: true,
       staffProfile: {
         create: {
           practiceId: guard.staff.practiceId,
