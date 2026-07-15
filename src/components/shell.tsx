@@ -14,6 +14,7 @@ const NAV: Partial<Record<SessionRole, Array<{ href: string; label: string }>>> 
   ],
   RECEPTIONIST: [
     { href: "/reception", label: "Front desk" },
+    { href: "/reception/patients", label: "Patients" },
     { href: "/waiting-room", label: "Waiting room" },
   ],
   NURSE: [
@@ -27,6 +28,7 @@ const NAV: Partial<Record<SessionRole, Array<{ href: string; label: string }>>> 
   MANAGER: [
     { href: "/manager", label: "Overview" },
     { href: "/reception", label: "Front desk" },
+    { href: "/reception/patients", label: "Patients" },
     { href: "/manager/audit", label: "Audit log" },
     { href: "/waiting-room", label: "Waiting room" },
   ],

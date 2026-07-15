@@ -9,7 +9,10 @@ A medical practice management web app — PWA-enabled and fully responsive.
   with self-captured vitals (BP, heart rate, temperature, …), history of
   appointments, cases and vitals, in-app alerts feed.
 - **Receptionist**: day list, confirm bookings, check-in (assigns queue
-  numbers), cancel / no-show.
+  numbers), cancel / no-show; patient search (name/phone/email), walk-in
+  registration (offline patients or with an emailed account-claim link),
+  immediate walk-in check-in and slot-validated booking on a patient's
+  behalf.
 - **Nurse**: nurse station with the live waiting queue and vitals capture for
   checked-in patients.
 - **Doctor**: consultation queue, full case view (complaint + self and nurse
