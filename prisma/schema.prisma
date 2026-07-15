@@ -10,6 +10,11 @@ datasource db {
 enum Role {
   OWNER
   ADMIN
+  PATIENT
+  MANAGER
+  RECEPTIONIST
+  NURSE
+  DOCTOR
 }
 
 enum PracticeStatus {
@@ -25,15 +30,22 @@ enum TokenType {
 }
 
 model User {
-  id              String       @id @default(cuid())
-  email           String       @unique
-  passwordHash    String
-  role            Role         @default(OWNER)
-  emailVerifiedAt DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  practice        Practice?
-  emailTokens     EmailToken[]
+  id                 String          @id @default(cuid())
+  email              String          @unique
+  passwordHash       String
+  role               Role            @default(OWNER)
+  emailVerifiedAt    DateTime?
+  mustChangePassword Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  practice           Practice?
+  emailTokens        EmailToken[]
+  patientProfile     PatientProfile?
+  staffProfile       StaffProfile?
+  vitalsRecorded     VitalsRecord[]     @relation("VitalsRecordedBy")
+  notifications      Notification[]
+  sessions           Session[]
+  pushSubscriptions  PushSubscription[]
 }
 
 model Practice {
@@ -58,6 +70,8 @@ model Practice {
   approvedAt      DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+  staff           StaffProfile[]
+  appointments    Appointment[]
 
   @@index([status])
 }
@@ -78,4 +92,309 @@ model EmailToken {
 model RegionCounter {
   region     String @id
   lastNumber Int    @default(0)
+}
+
+enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
+  CHECKED_IN
+  IN_CONSULT
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum CaseStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum VitalsSource {
+  SELF
+  NURSE
+}
+
+model PatientProfile {
+  id                String         @id @default(cuid())
+  userId            String         @unique
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName         String
+  lastName          String
+  dateOfBirth       DateTime?
+  phone             String?
+  address           String?
+  medicalAidName    String?
+  medicalAidNumber  String?
+  allergies         String?
+  chronicConditions String?
+  emergencyContact  String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  appointments      Appointment[]
+  cases             MedicalCase[]
+  vitals            VitalsRecord[]
+}
+
+model StaffProfile {
+  id           String        @id @default(cuid())
+  userId       String        @unique
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practiceId   String
+  practice     Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  firstName    String
+  lastName     String
+  title             String? // e.g. "Dr" or "Sr"; shown on public queue for doctors
+  specialty         String?
+  appointments      Appointment[]      @relation("DoctorAppointments")
+  availabilityRules AvailabilityRule[]
+
+  @@index([practiceId])
+}
+
+model Appointment {
+  id           String            @id @default(cuid())
+  practiceId   String
+  practice     Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patientId    String
+  patient      PatientProfile    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId     String?
+  doctor       StaffProfile?     @relation("DoctorAppointments", fields: [doctorId], references: [id], onDelete: SetNull)
+  scheduledAt  DateTime
+  reason       String
+  status       AppointmentStatus @default(REQUESTED)
+  queueNumber  Int? // assigned at check-in; drives the waiting-room order
+  checkedInAt    DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  cancelReason   String?
+  reminderSentAt DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  case         MedicalCase?
+  vitals       VitalsRecord[]
+
+  @@index([practiceId, scheduledAt])
+  @@index([patientId])
+  @@index([status])
+}
+
+model MedicalCase {
+  id            String         @id @default(cuid())
+  patientId     String
+  patient       PatientProfile @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointmentId String?        @unique
+  appointment   Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  complaint     String
+  description   String?
+  status        CaseStatus     @default(OPEN)
+  doctorNotes   String?
+  closedAt      DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  vitals        VitalsRecord[]
+  diagnoses     Diagnosis[]
+  prescriptions Prescription[]
+  sickNotes     SickNote[]
+  attachments   Attachment[]
+
+  @@index([patientId])
+}
+
+model Diagnosis {
+  id            String      @id @default(cuid())
+  caseId        String
+  case          MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patientId     String
+  icdCode       String?
+  description   String
+  diagnosedById String // User id
+  createdAt     DateTime    @default(now())
+
+  @@index([caseId])
+  @@index([patientId])
+}
+
+model Prescription {
+  id             String      @id @default(cuid())
+  caseId         String
+  case           MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patientId      String
+  prescribedById String // User id
+  medication     String
+  dosage         String
+  frequency      String
+  durationDays   Int?
+  instructions   String?
+  createdAt      DateTime    @default(now())
+
+  @@index([caseId])
+  @@index([patientId])
+}
+
+model SickNote {
+  id         String      @id @default(cuid())
+  caseId     String
+  case       MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patientId  String
+  issuedById String // User id
+  fromDate   DateTime
+  toDate     DateTime
+  note       String?
+  createdAt  DateTime    @default(now())
+
+  @@index([caseId])
+  @@index([patientId])
+}
+
+// Small files (photos, documents) stored inline in Postgres — max 2 MB,
+// enforced at upload. Bytes are only loaded by the serving route; list
+// queries must select metadata only.
+model Attachment {
+  id           String      @id @default(cuid())
+  caseId       String
+  case         MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patientId    String
+  uploadedById String // User id
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  data         Bytes
+  createdAt    DateTime    @default(now())
+
+  @@index([caseId])
+  @@index([patientId])
+}
+
+model VitalsRecord {
+  id              String          @id @default(cuid())
+  patientId       String
+  patient         PatientProfile  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  caseId          String?
+  case            MedicalCase?    @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  appointmentId   String?
+  appointment     Appointment?    @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  recordedById    String
+  recordedBy      User            @relation("VitalsRecordedBy", fields: [recordedById], references: [id], onDelete: Cascade)
+  source          VitalsSource
+  systolic        Int?
+  diastolic       Int?
+  heartRate       Int?
+  respiratoryRate Int?
+  temperatureC    Float?
+  oxygenSat       Int?
+  weightKg        Float?
+  heightCm        Float?
+  glucoseMmol     Float?
+  painLevel       Int? // 0-10
+  notes           String?
+  recordedAt      DateTime        @default(now())
+
+  @@index([patientId])
+  @@index([caseId])
+  @@index([appointmentId])
+}
+
+// Weekly recurring bookable hours for a doctor. Slots are generated from
+// these rules; bookings must land exactly on a generated slot.
+model AvailabilityRule {
+  id          String       @id @default(cuid())
+  doctorId    String
+  doctor      StaffProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  weekday     Int // 0 = Sunday … 6 = Saturday
+  startMinute Int // minutes since midnight, practice-local
+  endMinute   Int
+  slotMinutes Int          @default(30)
+  createdAt   DateTime     @default(now())
+
+  @@index([doctorId, weekday])
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SIMULATED
+  SENT
+  FAILED
+}
+
+// Every outbound notification event. Delivered to WEBHOOK_URL when
+// configured (a 3rd-party integration does the actual email/SMS), otherwise
+// marked SIMULATED. Also serves as the user's in-app alerts feed.
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // e.g. BOOKING_CONFIRMED, QUEUE_NEXT, EMAIL_VERIFY
+  channel   NotificationChannel
+  recipient String? // email address / phone number for the webhook consumer
+  title     String
+  body      String
+  data      Json?
+  status    NotificationStatus  @default(PENDING)
+  error     String?
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// Server-side session record backing the signed cookie (the cookie carries
+// this row's id as `sid`). Revocation = setting revokedAt; a token without
+// a live row is rejected regardless of its signature.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+}
+
+// Browser push subscription (one row per device/browser). Dead endpoints
+// (404/410 from the push service) are pruned automatically on send.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Append-only audit trail: who did/viewed what, when, from where. No foreign
+// keys by design — entries must survive deletion of the actor or subject.
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  actorEmail   String?
+  actorRole    String?
+  action       String // e.g. chart.view, appointment.check_in, auth.login_failed
+  resourceType String?
+  resourceId   String?
+  patientId    String?
+  practiceId   String?
+  details      Json?
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([practiceId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([patientId, createdAt])
 }
