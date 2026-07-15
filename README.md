@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Practices Portal
 
-## Getting Started
+A medical practice management web app — PWA-enabled and fully responsive.
 
-First, run the development server:
+## Features
+
+- **Patient**: self-registration, online booking, self-service personal/medical
+  details, medical cases (complaints) with self-captured vitals (BP, heart
+  rate, temperature, …), history of appointments, cases and vitals.
+- **Receptionist**: day list, confirm bookings, check-in (assigns queue
+  numbers), cancel / no-show.
+- **Nurse**: nurse station with the live waiting queue and vitals capture for
+  checked-in patients.
+- **Doctor**: consultation queue, full case view (complaint + self and nurse
+  vitals), doctor notes, start/complete consultations.
+- **Practice manager**: overview stats, staff account management, plus access
+  to the front desk.
+- **Public waiting room** (`/waiting-room`): anonymized live queue (number,
+  initials, doctor, status) — suitable for a lobby display; no sign-in needed.
+- **PWA**: installable (manifest + icons), service worker with offline
+  fallback; live data stays network-first.
+
+## Stack
+
+Next.js (App Router) · Prisma 7 + PostgreSQL · Tailwind CSS 4 · Vitest.
+Auth is dependency-free: scrypt password hashes and HMAC-signed session
+cookies (`src/lib/auth.ts`).
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env       # set DATABASE_URL and AUTH_SECRET
+npm run db:deploy          # apply migrations
+npm run db:seed            # demo practice + accounts (optional)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Demo accounts (after `npm run db:seed`, password `Password123!`)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Role         | Email                                  |
+| ------------ | -------------------------------------- |
+| Manager      | manager@demo.practicesportal.test      |
+| Receptionist | reception@demo.practicesportal.test    |
+| Nurse        | nurse@demo.practicesportal.test        |
+| Doctor       | doctor@demo.practicesportal.test       |
+| Patient      | patient@demo.practicesportal.test      |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Scripts
 
-## Learn More
+- `npm test` — unit tests (auth, clinic domain rules, health)
+- `npm run lint` — ESLint
+- `npm run build` / `npm start` — production build & serve
+- `npm run db:migrate|db:deploy|db:generate|db:seed`
 
-To learn more about Next.js, take a look at the following resources:
+## Access model
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Role rights for appointment transitions and clinical data live in
+`src/lib/clinic.ts` (unit-tested). Reception sees demographics only; case
+details and vitals are restricted to nurse/doctor/manager. The public
+waiting-room API exposes queue number, initials and status — never names or
+clinical data.
