@@ -192,7 +192,76 @@ model MedicalCase {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   vitals        VitalsRecord[]
+  diagnoses     Diagnosis[]
+  prescriptions Prescription[]
+  sickNotes     SickNote[]
+  attachments   Attachment[]
 
+  @@index([patientId])
+}
+
+model Diagnosis {
+  id            String      @id @default(cuid())
+  caseId        String
+  case          MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patientId     String
+  icdCode       String?
+  description   String
+  diagnosedById String // User id
+  createdAt     DateTime    @default(now())
+
+  @@index([caseId])
+  @@index([patientId])
+}
+
+model Prescription {
+  id             String      @id @default(cuid())
+  caseId         String
+  case           MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patientId      String
+  prescribedById String // User id
+  medication     String
+  dosage         String
+  frequency      String
+  durationDays   Int?
+  instructions   String?
+  createdAt      DateTime    @default(now())
+
+  @@index([caseId])
+  @@index([patientId])
+}
+
+model SickNote {
+  id         String      @id @default(cuid())
+  caseId     String
+  case       MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patientId  String
+  issuedById String // User id
+  fromDate   DateTime
+  toDate     DateTime
+  note       String?
+  createdAt  DateTime    @default(now())
+
+  @@index([caseId])
+  @@index([patientId])
+}
+
+// Small files (photos, documents) stored inline in Postgres — max 2 MB,
+// enforced at upload. Bytes are only loaded by the serving route; list
+// queries must select metadata only.
+model Attachment {
+  id           String      @id @default(cuid())
+  caseId       String
+  case         MedicalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  patientId    String
+  uploadedById String // User id
+  filename     String
+  mimeType     String
+  sizeBytes    Int
+  data         Bytes
+  createdAt    DateTime    @default(now())
+
+  @@index([caseId])
   @@index([patientId])
 }
 

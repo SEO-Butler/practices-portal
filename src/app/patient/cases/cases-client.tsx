@@ -5,6 +5,7 @@ import { api, fmtDateTime } from "@/lib/client";
 import { StatusBadge } from "@/components/status-badge";
 import { VitalsFields, vitalsFromForm } from "@/components/vitals-fields";
 import { VitalsSummary } from "@/components/vitals-summary";
+import { CaseRecords, type CaseRecordsData } from "@/components/case-records";
 
 interface Vitals {
   id: string;
@@ -19,7 +20,7 @@ interface Vitals {
   recordedAt: string;
 }
 
-interface MedicalCase {
+interface MedicalCase extends CaseRecordsData {
   id: string;
   complaint: string;
   description: string | null;
@@ -38,12 +39,37 @@ export function CasesClient() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api<{ cases: MedicalCase[] }>("/api/patient/cases")
       .then((res) => setCases(res.cases))
       .catch((err) => setError(err.message));
   }, []);
+
+  async function uploadAttachment(caseId: string, file: File) {
+    setUploadingId(caseId);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/cases/${caseId}/attachments`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          (data as { error?: string }).error ?? "Upload failed",
+        );
+      }
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingId(null);
+    }
+  }
 
   useEffect(load, [load]);
 
@@ -160,6 +186,25 @@ export function CasesClient() {
                     </p>
                   </div>
                 )}
+                <CaseRecords data={c} />
+                <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-teal-700">
+                  <span className="underline">
+                    {uploadingId === c.id
+                      ? "Uploading…"
+                      : "Add photo or document (max 2 MB)"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    className="hidden"
+                    disabled={uploadingId !== null}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadAttachment(c.id, file);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
                 {c.vitals.length > 0 && (
                   <div className="mt-3 text-sm">
                     <p className="font-medium text-slate-600">Vitals</p>

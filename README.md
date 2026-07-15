@@ -16,7 +16,12 @@ A medical practice management web app — PWA-enabled and fully responsive.
 - **Nurse**: nurse station with the live waiting queue and vitals capture for
   checked-in patients.
 - **Doctor**: consultation queue, full case view (complaint + self and nurse
-  vitals), doctor notes, start/complete consultations.
+  vitals), doctor notes, start/complete consultations; clinical records per
+  case — ICD-coded diagnoses, prescriptions, sick notes — plus a
+  longitudinal full-history view of every past case for the patient.
+- **Attachments**: patients and clinicians attach photos/documents (JPEG,
+  PNG, WebP, PDF, ≤2 MB, stored in Postgres) to a case; downloads are
+  access-controlled and staff views are audited.
 - **Practice manager**: overview stats, staff account management (temporary
   passwords force a change on first login), doctors' weekly bookable hours,
   plus access to the front desk.
@@ -78,6 +83,15 @@ npm run dev
 - `npm run lint` — ESLint
 - `npm run build` / `npm start` — production build & serve
 - `npm run db:migrate|db:deploy|db:generate|db:seed`
+- `scripts/smoke.sh <base-url>` — integration smoke test (needs a seeded DB)
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push/PR: a checks
+job (lint, unit tests, production build) and an integration job that boots
+Postgres 16, applies migrations, seeds, starts the server and drives the
+full clinical flow — booking conflicts, attachments, prescriptions,
+role-boundary checks — via `scripts/smoke.sh`.
 
 ## Access model
 

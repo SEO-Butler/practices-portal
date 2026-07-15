@@ -45,7 +45,25 @@ export async function GET(
             },
           },
       doctor: { select: { id: true, title: true, firstName: true, lastName: true } },
-      case: clinical ? { include: { vitals: { orderBy: { recordedAt: "desc" } } } } : false,
+      case: clinical
+        ? {
+            include: {
+              vitals: { orderBy: { recordedAt: "desc" } },
+              diagnoses: { orderBy: { createdAt: "desc" } },
+              prescriptions: { orderBy: { createdAt: "desc" } },
+              sickNotes: { orderBy: { createdAt: "desc" } },
+              attachments: {
+                select: {
+                  id: true,
+                  filename: true,
+                  mimeType: true,
+                  sizeBytes: true,
+                  createdAt: true,
+                },
+              },
+            },
+          }
+        : false,
       vitals: clinical ? { orderBy: { recordedAt: "desc" } } : false,
     },
   });

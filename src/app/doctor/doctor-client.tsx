@@ -7,6 +7,9 @@ import { useLiveRefresh } from "@/lib/use-live";
 import { VitalsSummary } from "@/components/vitals-summary";
 import { TrendChart, type TrendSeries } from "@/components/trend-chart";
 import { normalBand } from "@/lib/vitals-flags";
+import { CaseRecords, type CaseRecordsData } from "@/components/case-records";
+import { CaseTools } from "./case-tools";
+import { HistoryPanel } from "./history-panel";
 
 interface QueueAppointment {
   id: string;
@@ -24,6 +27,7 @@ interface Detail {
   reason: string;
   status: string;
   patient: {
+    id: string;
     firstName: string;
     lastName: string;
     dateOfBirth: string | null;
@@ -32,13 +36,15 @@ interface Detail {
     allergies: string | null;
     chronicConditions: string | null;
   };
-  case: {
-    id: string;
-    complaint: string;
-    description: string | null;
-    status: string;
-    doctorNotes: string | null;
-  } | null;
+  case:
+    | ({
+        id: string;
+        complaint: string;
+        description: string | null;
+        status: string;
+        doctorNotes: string | null;
+      } & CaseRecordsData)
+    | null;
   vitals: Array<{
     id: string;
     source: string;
@@ -83,6 +89,7 @@ export function DoctorClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [history, setHistory] = useState<HistoryVitals[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -268,6 +275,17 @@ export function DoctorClient() {
                 <span className="text-slate-500">Reason for visit: </span>
                 {detail.reason}
               </p>
+              <button
+                onClick={() => setShowHistory((s) => !s)}
+                className="mt-3 text-sm font-medium text-teal-700 underline"
+              >
+                {showHistory ? "Hide patient history" : "View full patient history"}
+              </button>
+              {showHistory && (
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  <HistoryPanel patientId={detail.patient.id} />
+                </div>
+              )}
             </div>
 
             {detail.case ? (
@@ -306,6 +324,11 @@ export function DoctorClient() {
                     Save &amp; close case
                   </button>
                 </div>
+                <CaseRecords data={detail.case} />
+                <CaseTools
+                  caseId={detail.case.id}
+                  onSaved={() => selectedId && loadDetail(selectedId)}
+                />
               </div>
             ) : (
               <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">

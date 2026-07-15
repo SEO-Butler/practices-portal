@@ -16,6 +16,19 @@ export async function GET() {
     take: 50,
     include: {
       vitals: { orderBy: { recordedAt: "desc" } },
+      diagnoses: { orderBy: { createdAt: "desc" } },
+      prescriptions: { orderBy: { createdAt: "desc" } },
+      sickNotes: { orderBy: { createdAt: "desc" } },
+      attachments: {
+        // Metadata only — bytes are served by /api/attachments/[id].
+        select: {
+          id: true,
+          filename: true,
+          mimeType: true,
+          sizeBytes: true,
+          createdAt: true,
+        },
+      },
       appointment: {
         select: { scheduledAt: true, practice: { select: { practiceName: true } } },
       },
