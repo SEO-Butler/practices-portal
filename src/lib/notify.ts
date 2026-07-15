@@ -1,5 +1,6 @@
 import { createHmac } from "crypto";
 import { prisma } from "@/lib/db";
+import { sendPushToUser } from "@/lib/push";
 import type { NotificationChannel } from "@prisma/client";
 
 // Outbound notification pipeline. Every event is persisted (doubles as the
@@ -22,11 +23,33 @@ export function signWebhookBody(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body).digest("hex");
 }
 
+// Account-security links must never appear on a lock screen.
+const NO_PUSH_TYPES = new Set(["EMAIL_VERIFY", "PASSWORD_RESET"]);
+
+/** Landing page for a tapped push notification, by event type. */
+function pushUrlFor(type: string): string {
+  if (type.startsWith("QUEUE_")) return "/waiting-room";
+  if (type.startsWith("BOOKING_")) return "/patient/book";
+  return "/patient/alerts";
+}
+
 /**
  * Persists and dispatches one notification. Never throws — notification
  * failure must not break the business action that triggered it.
+ * Delivery layers: web push to the user's devices (when VAPID is
+ * configured), plus the outbound webhook (or SIMULATED without one).
  */
 export async function notify(input: NotifyInput): Promise<void> {
+  // Best-effort push to the user's subscribed devices, in parallel with
+  // the webhook path below.
+  if (!NO_PUSH_TYPES.has(input.type)) {
+    sendPushToUser(input.userId, {
+      title: input.title,
+      body: input.body,
+      url: pushUrlFor(input.type),
+    }).catch(() => {});
+  }
+
   let id: string;
   try {
     const row = await prisma.notification.create({

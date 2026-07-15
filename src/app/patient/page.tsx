@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/page-guard";
 import { prisma } from "@/lib/db";
 import { StatusBadge } from "@/components/status-badge";
 import { VerifyBanner } from "@/components/verify-banner";
+import { PushToggle } from "@/components/push-toggle";
 
 export const metadata = { title: "My dashboard" };
 export const dynamic = "force-dynamic";
@@ -45,6 +46,9 @@ export default async function PatientDashboard() {
   return (
     <AppShell title={`Hello, ${patient.firstName}`}>
       {user && !user.emailVerifiedAt && <VerifyBanner />}
+      <div className="mb-4 flex justify-end">
+        <PushToggle />
+      </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">

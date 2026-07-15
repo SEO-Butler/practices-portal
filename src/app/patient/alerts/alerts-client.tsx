@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, fmtDateTime } from "@/lib/client";
+import { PushToggle } from "@/components/push-toggle";
 
 interface Alert {
   id: string;
@@ -39,11 +40,14 @@ export function AlertsClient() {
 
   return (
     <div className="max-w-2xl">
-      <p className="mb-4 text-sm text-slate-500">
-        Every message the practice sends you (email and SMS deliveries are
-        handled by the connected integration; entries marked{" "}
-        <span className="font-medium">simulated</span> were not actually sent).
-      </p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">
+          Every message the practice sends you (email and SMS deliveries are
+          handled by the connected integration; entries marked{" "}
+          <span className="font-medium">simulated</span> were not actually sent).
+        </p>
+        <PushToggle />
+      </div>
       {alerts.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-10 text-center text-slate-500">
           No alerts yet.

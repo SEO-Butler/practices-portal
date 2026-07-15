@@ -42,9 +42,10 @@ model User {
   emailTokens        EmailToken[]
   patientProfile     PatientProfile?
   staffProfile       StaffProfile?
-  vitalsRecorded     VitalsRecord[]  @relation("VitalsRecordedBy")
+  vitalsRecorded     VitalsRecord[]     @relation("VitalsRecordedBy")
   notifications      Notification[]
   sessions           Session[]
+  pushSubscriptions  PushSubscription[]
 }
 
 model Practice {
@@ -357,6 +358,21 @@ model Session {
   lastSeenAt DateTime  @default(now())
   ip         String?
   userAgent  String?
+
+  @@index([userId])
+}
+
+// Browser push subscription (one row per device/browser). Dead endpoints
+// (404/410 from the push service) are pruned automatically on send.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
 
   @@index([userId])
 }

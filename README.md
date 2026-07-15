@@ -28,6 +28,11 @@ A medical practice management web app — PWA-enabled and fully responsive.
 - **Slot-based booking**: patients book only into open slots generated from
   each doctor's weekly availability rules; double-booking is prevented
   transactionally and "any doctor" bookings are auto-assigned.
+- **Web push (PWA)**: with VAPID keys configured (`npm run push:keygen`),
+  patients enable device notifications with one tap; booking updates, queue
+  alerts ("you are number N", "you're next") and reminders arrive even when
+  the app is closed. Dead subscriptions are pruned automatically; sensitive
+  account links (verify/reset) are never pushed.
 - **Notifications via webhook**: every event (booking requested/confirmed/
   cancelled, queue check-in, "you're next", reminders, verify/reset links) is
   stored and POSTed to `WEBHOOK_URL` with an HMAC `X-Webhook-Signature` for a
