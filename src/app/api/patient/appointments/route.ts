@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requirePatient } from "@/lib/session";
 import { notify } from "@/lib/notify";
+import { publishPracticeEvent } from "@/lib/events";
 import { resolveBooking, ACTIVE_APPOINTMENT_STATUSES } from "@/lib/slots";
 
 export const dynamic = "force-dynamic";
@@ -124,6 +125,7 @@ export async function POST(request: Request) {
     throw err;
   }
 
+  publishPracticeEvent(practiceId, "appointments");
   await notify({
     userId: guard.session.sub,
     type: "BOOKING_REQUESTED",

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, fmtDateTime } from "@/lib/client";
 import { StatusBadge } from "@/components/status-badge";
 import { VitalsFields, vitalsFromForm } from "@/components/vitals-fields";
+import { VitalsSummary } from "@/components/vitals-summary";
 
 interface Vitals {
   id: string;
@@ -30,16 +31,6 @@ interface MedicalCase {
 
 const input =
   "w-full rounded-md border border-slate-300 px-3 py-2 focus:border-teal-500 focus:outline-none";
-
-function vitalsSummary(v: Vitals): string {
-  const parts: string[] = [];
-  if (v.systolic != null) parts.push(`BP ${v.systolic}/${v.diastolic ?? "–"}`);
-  if (v.heartRate != null) parts.push(`HR ${v.heartRate}`);
-  if (v.temperatureC != null) parts.push(`${v.temperatureC}°C`);
-  if (v.oxygenSat != null) parts.push(`SpO₂ ${v.oxygenSat}%`);
-  if (v.painLevel != null) parts.push(`Pain ${v.painLevel}/10`);
-  return parts.join(" · ") || "notes only";
-}
 
 export function CasesClient() {
   const [cases, setCases] = useState<MedicalCase[] | null>(null);
@@ -184,7 +175,7 @@ export function CasesClient() {
                           >
                             {v.source === "SELF" ? "Self" : "Nurse"}
                           </span>
-                          {vitalsSummary(v)}
+                          <VitalsSummary v={v} />
                           <span className="ml-2 text-xs text-slate-400">
                             {fmtDateTime(v.recordedAt)}
                           </span>

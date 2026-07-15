@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtDateTime, fmtTime } from "@/lib/client";
 import { StatusBadge } from "@/components/status-badge";
+import { useLiveRefresh } from "@/lib/use-live";
+import { VitalsSummary } from "@/components/vitals-summary";
+import { TrendChart, type TrendSeries } from "@/components/trend-chart";
+import { normalBand } from "@/lib/vitals-flags";
 
 interface QueueAppointment {
   id: string;
@@ -50,38 +54,61 @@ interface Detail {
   }>;
 }
 
+interface HistoryVitals {
+  systolic: number | null;
+  diastolic: number | null;
+  heartRate: number | null;
+  recordedAt: string;
+}
+
+function toSeries(
+  history: HistoryVitals[],
+  key: "systolic" | "diastolic" | "heartRate",
+  name: string,
+): TrendSeries {
+  return {
+    name,
+    points: history
+      .filter((h) => h[key] != null)
+      .map((h) => ({ t: new Date(h.recordedAt).getTime(), v: h[key]! })),
+  };
+}
+
 const ACTIVE_STATUSES = ["CHECKED_IN", "IN_CONSULT"];
 
 export function DoctorClient() {
   const [mineOnly, setMineOnly] = useState(true);
   const [queue, setQueue] = useState<QueueAppointment[] | null>(null);
+  const [practiceId, setPracticeId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [history, setHistory] = useState<HistoryVitals[]>([]);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const loadQueue = useCallback(() => {
-    api<{ appointments: QueueAppointment[] }>(
+    api<{ appointments: QueueAppointment[]; practiceId: string }>(
       `/api/staff/appointments?${mineOnly ? "mine=1" : ""}`,
     )
       .then((res) => {
         setQueue(res.appointments.filter((a) => ACTIVE_STATUSES.includes(a.status)));
+        setPracticeId(res.practiceId);
         setError(null);
       })
       .catch((err) => setError(err.message));
   }, [mineOnly]);
 
-  useEffect(() => {
-    loadQueue();
-    const t = setInterval(loadQueue, 15_000);
-    return () => clearInterval(t);
-  }, [loadQueue]);
+  useEffect(loadQueue, [loadQueue]);
+  useLiveRefresh(practiceId, loadQueue);
 
   const loadDetail = useCallback((id: string) => {
-    api<{ appointment: Detail }>(`/api/staff/appointments/${id}`)
+    api<{ appointment: Detail; patientVitals: HistoryVitals[] }>(
+      `/api/staff/appointments/${id}`,
+    )
       .then((res) => {
         setDetail(res.appointment);
+        setHistory(res.patientVitals);
         setNotes(res.appointment.case?.doctorNotes ?? "");
       })
       .catch((err) => setError(err.message));
@@ -305,20 +332,7 @@ export function DoctorClient() {
                       >
                         {v.source === "SELF" ? "Self" : "Nurse"}
                       </span>
-                      <span className="text-slate-600">
-                        {[
-                          v.systolic != null
-                            ? `BP ${v.systolic}/${v.diastolic ?? "–"}`
-                            : null,
-                          v.heartRate != null ? `HR ${v.heartRate}` : null,
-                          v.respiratoryRate != null ? `RR ${v.respiratoryRate}` : null,
-                          v.temperatureC != null ? `${v.temperatureC}°C` : null,
-                          v.oxygenSat != null ? `SpO₂ ${v.oxygenSat}%` : null,
-                          v.painLevel != null ? `Pain ${v.painLevel}/10` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "notes only"}
-                      </span>
+                      <VitalsSummary v={v} />
                       {v.notes && (
                         <span className="text-slate-400">— {v.notes}</span>
                       )}
@@ -329,6 +343,24 @@ export function DoctorClient() {
                   ))}
                 </ul>
               )}
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <TrendChart
+                title="Blood pressure trend"
+                unit="mmHg"
+                series={[
+                  toSeries(history, "systolic", "Systolic"),
+                  toSeries(history, "diastolic", "Diastolic"),
+                ].filter((s) => s.points.length > 0)}
+                band={normalBand("systolic")}
+              />
+              <TrendChart
+                title="Heart rate trend"
+                unit="bpm"
+                series={[toSeries(history, "heartRate", "Heart rate")]}
+                band={normalBand("heartRate")}
+              />
             </div>
           </div>
         )}

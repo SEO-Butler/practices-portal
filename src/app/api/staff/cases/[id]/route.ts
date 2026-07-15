@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireStaff } from "@/lib/session";
+import { publishPracticeEvent } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -45,5 +46,6 @@ export async function PATCH(
   }
 
   const updated = await prisma.medicalCase.update({ where: { id }, data });
+  publishPracticeEvent(guard.staff.practiceId, "cases");
   return NextResponse.json({ case: updated });
 }

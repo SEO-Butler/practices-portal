@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtDateTime } from "@/lib/client";
 import { VitalsFields, vitalsFromForm } from "@/components/vitals-fields";
+import { TrendChart, type TrendSeries } from "@/components/trend-chart";
+import { FlaggedBp, FlaggedValue } from "@/components/flagged-value";
+import { normalBand } from "@/lib/vitals-flags";
 
 interface Vitals {
   id: string;
@@ -18,6 +21,25 @@ interface Vitals {
   painLevel: number | null;
   notes: string | null;
   recordedAt: string;
+}
+
+type NumericKey =
+  | "systolic"
+  | "diastolic"
+  | "heartRate"
+  | "temperatureC"
+  | "oxygenSat"
+  | "weightKg"
+  | "glucoseMmol";
+
+function seriesOf(vitals: Vitals[], key: NumericKey, name: string): TrendSeries {
+  return {
+    name,
+    points: [...vitals]
+      .reverse() // API returns newest first; charts need ascending time
+      .filter((v) => v[key] != null)
+      .map((v) => ({ t: new Date(v.recordedAt).getTime(), v: v[key]! })),
+  };
 }
 
 export function VitalsClient() {
@@ -54,6 +76,45 @@ export function VitalsClient() {
       setBusy(false);
     }
   }
+
+  const charts =
+    vitals && vitals.length > 0
+      ? [
+          {
+            title: "Blood pressure",
+            unit: "mmHg",
+            series: [
+              seriesOf(vitals, "systolic", "Systolic"),
+              seriesOf(vitals, "diastolic", "Diastolic"),
+            ].filter((s) => s.points.length > 0),
+            band: normalBand("systolic"),
+          },
+          {
+            title: "Heart rate",
+            unit: "bpm",
+            series: [seriesOf(vitals, "heartRate", "Heart rate")],
+            band: normalBand("heartRate"),
+          },
+          {
+            title: "Oxygen saturation",
+            unit: "%",
+            series: [seriesOf(vitals, "oxygenSat", "SpO₂")],
+            band: normalBand("oxygenSat"),
+          },
+          {
+            title: "Glucose",
+            unit: "mmol/L",
+            series: [seriesOf(vitals, "glucoseMmol", "Glucose")],
+            band: normalBand("glucoseMmol"),
+          },
+          {
+            title: "Weight",
+            unit: "kg",
+            series: [seriesOf(vitals, "weightKg", "Weight")],
+            band: null,
+          },
+        ].filter((c) => c.series.reduce((n, s) => n + s.points.length, 0) >= 2)
+      : [];
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -102,14 +163,44 @@ export function VitalsClient() {
                       {fmtDateTime(v.recordedAt)}
                     </td>
                     <td className="py-2 pr-3">
-                      {v.systolic != null ? `${v.systolic}/${v.diastolic ?? "–"}` : "–"}
+                      {v.systolic != null ? (
+                        <FlaggedBp systolic={v.systolic} diastolic={v.diastolic} />
+                      ) : (
+                        "–"
+                      )}
                     </td>
-                    <td className="py-2 pr-3">{v.heartRate ?? "–"}</td>
                     <td className="py-2 pr-3">
-                      {v.temperatureC != null ? `${v.temperatureC}°C` : "–"}
+                      {v.heartRate != null ? (
+                        <FlaggedValue
+                          metric="heartRate"
+                          value={v.heartRate}
+                          text={String(v.heartRate)}
+                        />
+                      ) : (
+                        "–"
+                      )}
                     </td>
                     <td className="py-2 pr-3">
-                      {v.oxygenSat != null ? `${v.oxygenSat}%` : "–"}
+                      {v.temperatureC != null ? (
+                        <FlaggedValue
+                          metric="temperatureC"
+                          value={v.temperatureC}
+                          text={`${v.temperatureC}°C`}
+                        />
+                      ) : (
+                        "–"
+                      )}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {v.oxygenSat != null ? (
+                        <FlaggedValue
+                          metric="oxygenSat"
+                          value={v.oxygenSat}
+                          text={`${v.oxygenSat}%`}
+                        />
+                      ) : (
+                        "–"
+                      )}
                     </td>
                     <td className="py-2">
                       {v.source === "SELF" ? "Me" : "Nurse"}
@@ -121,6 +212,27 @@ export function VitalsClient() {
           </div>
         )}
       </section>
+
+      {charts.length > 0 && (
+        <section className="lg:col-span-2">
+          <h2 className="mb-3 font-semibold">Trends</h2>
+          <p className="mb-3 text-sm text-slate-500">
+            Shaded area shows the typical range. Values outside it are
+            highlighted in your history above (▲ high, ▼ low).
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {charts.map((c) => (
+              <TrendChart
+                key={c.title}
+                title={c.title}
+                unit={c.unit}
+                series={c.series}
+                band={c.band}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

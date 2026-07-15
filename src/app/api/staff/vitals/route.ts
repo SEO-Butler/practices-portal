@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireStaff } from "@/lib/session";
 import { parseVitals } from "@/lib/clinic";
+import { publishPracticeEvent } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -53,5 +54,6 @@ export async function POST(request: Request) {
       ...parsed.vitals,
     },
   });
+  publishPracticeEvent(guard.staff.practiceId, "vitals");
   return NextResponse.json({ vitals: record }, { status: 201 });
 }

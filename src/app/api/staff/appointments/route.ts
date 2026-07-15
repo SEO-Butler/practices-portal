@@ -45,5 +45,9 @@ export async function GET(request: Request) {
     },
   });
 
-  return NextResponse.json({ appointments, role: guard.session.role });
+  return NextResponse.json({
+    appointments,
+    role: guard.session.role,
+    practiceId: guard.staff.practiceId,
+  });
 }

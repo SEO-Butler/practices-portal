@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api, fmtDateTime, fmtTime } from "@/lib/client";
 import { StatusBadge } from "@/components/status-badge";
 import { VitalsFields, vitalsFromForm } from "@/components/vitals-fields";
+import { useLiveRefresh } from "@/lib/use-live";
+import { VitalsSummary } from "@/components/vitals-summary";
 
 interface QueueAppointment {
   id: string;
@@ -49,6 +51,7 @@ interface Detail {
 
 export function NurseClient() {
   const [queue, setQueue] = useState<QueueAppointment[] | null>(null);
+  const [practiceId, setPracticeId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,21 +59,19 @@ export function NurseClient() {
   const [busy, setBusy] = useState(false);
 
   const loadQueue = useCallback(() => {
-    api<{ appointments: QueueAppointment[] }>(
+    api<{ appointments: QueueAppointment[]; practiceId: string }>(
       "/api/staff/appointments?status=CHECKED_IN",
     )
       .then((res) => {
         setQueue(res.appointments);
+        setPracticeId(res.practiceId);
         setError(null);
       })
       .catch((err) => setError(err.message));
   }, []);
 
-  useEffect(() => {
-    loadQueue();
-    const t = setInterval(loadQueue, 15_000);
-    return () => clearInterval(t);
-  }, [loadQueue]);
+  useEffect(loadQueue, [loadQueue]);
+  useLiveRefresh(practiceId, loadQueue);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -231,19 +232,7 @@ export function NurseClient() {
                       >
                         {v.source === "SELF" ? "Self" : "Nurse"}
                       </span>
-                      <span className="text-slate-600">
-                        {[
-                          v.systolic != null
-                            ? `BP ${v.systolic}/${v.diastolic ?? "–"}`
-                            : null,
-                          v.heartRate != null ? `HR ${v.heartRate}` : null,
-                          v.temperatureC != null ? `${v.temperatureC}°C` : null,
-                          v.oxygenSat != null ? `SpO₂ ${v.oxygenSat}%` : null,
-                          v.painLevel != null ? `Pain ${v.painLevel}/10` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || "notes only"}
-                      </span>
+                      <VitalsSummary v={v} />
                       <span className="text-xs text-slate-400">
                         {fmtDateTime(v.recordedAt)}
                       </span>

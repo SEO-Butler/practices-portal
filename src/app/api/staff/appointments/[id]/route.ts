@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireStaff } from "@/lib/session";
 import { STAFF_ROLES } from "@/lib/auth";
 import { notify } from "@/lib/notify";
+import { publishPracticeEvent } from "@/lib/events";
 import {
   ACTION_TO,
   canPerformAction,
@@ -51,7 +52,17 @@ export async function GET(
   if (!appointment) {
     return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
   }
-  return NextResponse.json({ appointment, clinical });
+
+  // Clinical viewers also get the patient's vitals history for trend charts.
+  const patientVitals = clinical
+    ? await prisma.vitalsRecord.findMany({
+        where: { patientId: appointment.patientId },
+        orderBy: { recordedAt: "asc" },
+        take: 100,
+      })
+    : [];
+
+  return NextResponse.json({ appointment, clinical, patientVitals });
 }
 
 // Status transitions via named actions (confirm, check_in, start_consult,
@@ -125,6 +136,7 @@ export async function PATCH(
         },
       });
     });
+    publishPracticeEvent(guard.staff.practiceId, "appointments");
     await notify({
       userId: patientUser.id,
       type: "QUEUE_CHECKED_IN",
@@ -153,6 +165,8 @@ export async function PATCH(
         : {}),
     },
   });
+
+  publishPracticeEvent(guard.staff.practiceId, "appointments");
 
   const when = appointment.scheduledAt.toLocaleString();
   if (action === "confirm") {

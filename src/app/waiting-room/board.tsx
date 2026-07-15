@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/client";
+import { useLiveRefresh } from "@/lib/use-live";
 
 interface PracticeOption {
   id: string;
@@ -15,10 +16,9 @@ interface QueueEntry {
   status: string;
 }
 
-const REFRESH_MS = 10_000;
-
 // Public board: designed to run full-screen on a lobby display, but equally
 // usable on a patient's phone. Anonymized data only (see /api/waiting-room).
+// Updates arrive live over SSE; a slow fallback poll covers dropped streams.
 export function WaitingRoomBoard() {
   const [practices, setPractices] = useState<PracticeOption[]>([]);
   const [practiceId, setPracticeId] = useState<string>("");
@@ -49,11 +49,8 @@ export function WaitingRoomBoard() {
       .catch(() => setError("Waiting room unavailable — retrying…"));
   }, [practiceId]);
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [load]);
+  useEffect(load, [load]);
+  useLiveRefresh(practiceId, load);
 
   return (
     <div>
@@ -73,7 +70,7 @@ export function WaitingRoomBoard() {
         )}
         {asOf && (
           <span className="text-sm text-slate-500">
-            Updated {new Date(asOf).toLocaleTimeString()} · refreshes automatically
+            Updated {new Date(asOf).toLocaleTimeString()} · live
           </span>
         )}
       </div>

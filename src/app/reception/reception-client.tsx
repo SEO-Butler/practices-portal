@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, fmtTime } from "@/lib/client";
 import { StatusBadge } from "@/components/status-badge";
+import { useLiveRefresh } from "@/lib/use-live";
 
 interface StaffAppointment {
   id: string;
@@ -40,23 +41,24 @@ export function ReceptionClient() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [showRequests, setShowRequests] = useState(false);
   const [appointments, setAppointments] = useState<StaffAppointment[] | null>(null);
+  const [practiceId, setPracticeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     const qs = showRequests ? "all=1&status=REQUESTED" : `date=${date}`;
-    api<{ appointments: StaffAppointment[] }>(`/api/staff/appointments?${qs}`)
+    api<{ appointments: StaffAppointment[]; practiceId: string }>(
+      `/api/staff/appointments?${qs}`,
+    )
       .then((res) => {
         setAppointments(res.appointments);
+        setPracticeId(res.practiceId);
         setError(null);
       })
       .catch((err) => setError(err.message));
   }, [date, showRequests]);
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 15_000);
-    return () => clearInterval(t);
-  }, [load]);
+  useEffect(load, [load]);
+  useLiveRefresh(practiceId, load);
 
   async function act(id: string, action: string) {
     try {
@@ -88,9 +90,7 @@ export function ReceptionClient() {
           />
           All open booking requests
         </label>
-        <span className="ml-auto text-xs text-slate-400">
-          Refreshes every 15 s
-        </span>
+        <span className="ml-auto text-xs text-slate-400">Live updates</span>
       </div>
 
       {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
