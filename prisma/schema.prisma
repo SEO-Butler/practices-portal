@@ -44,6 +44,7 @@ model User {
   staffProfile       StaffProfile?
   vitalsRecorded     VitalsRecord[]  @relation("VitalsRecordedBy")
   notifications      Notification[]
+  sessions           Session[]
 }
 
 model Practice {
@@ -272,4 +273,43 @@ model Notification {
   createdAt DateTime            @default(now())
 
   @@index([userId, createdAt])
+}
+
+// Server-side session record backing the signed cookie (the cookie carries
+// this row's id as `sid`). Revocation = setting revokedAt; a token without
+// a live row is rejected regardless of its signature.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+}
+
+// Append-only audit trail: who did/viewed what, when, from where. No foreign
+// keys by design — entries must survive deletion of the actor or subject.
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  actorEmail   String?
+  actorRole    String?
+  action       String // e.g. chart.view, appointment.check_in, auth.login_failed
+  resourceType String?
+  resourceId   String?
+  patientId    String?
+  practiceId   String?
+  details      Json?
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  @@index([practiceId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([patientId, createdAt])
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requirePatient } from "@/lib/session";
+import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,16 @@ export async function PUT(request: Request) {
   const profile = await prisma.patientProfile.update({
     where: { id: guard.patient.id },
     data,
+  });
+  await audit({
+    action: "profile.updated",
+    actorId: guard.session.sub,
+    actorRole: "PATIENT",
+    resourceType: "patientProfile",
+    resourceId: guard.patient.id,
+    patientId: guard.patient.id,
+    details: { fields: Object.keys(data) },
+    request,
   });
   return NextResponse.json({ profile });
 }

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth";
 import { validPassword } from "@/lib/clinic";
 import { consumeEmailToken } from "@/lib/email-tokens";
+import { revokeUserSessions } from "@/lib/session";
+import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,15 @@ export async function POST(request: Request) {
       data: { usedAt: new Date() },
     }),
   ]);
+
+  // A reset invalidates every existing session for the account.
+  await revokeUserSessions(token.userId, null);
+  await audit({
+    action: "auth.password_reset",
+    actorId: token.userId,
+    actorEmail: token.user.email,
+    request,
+  });
 
   return NextResponse.json({ ok: true });
 }

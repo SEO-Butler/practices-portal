@@ -21,6 +21,7 @@ export type SessionRole =
 export interface SessionPayload {
   sub: string; // user id
   role: SessionRole;
+  sid: string; // server-side Session row id — enables revocation
   exp: number; // unix seconds
 }
 
@@ -92,6 +93,7 @@ export function verifySessionToken(token: string): SessionPayload | null {
     if (
       typeof payload.sub !== "string" ||
       typeof payload.role !== "string" ||
+      typeof payload.sid !== "string" ||
       typeof payload.exp !== "number" ||
       payload.exp < Math.floor(Date.now() / 1000)
     ) {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireStaff } from "@/lib/session";
 import { parseVitals } from "@/lib/clinic";
 import { publishPracticeEvent } from "@/lib/events";
+import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -55,5 +56,16 @@ export async function POST(request: Request) {
     },
   });
   publishPracticeEvent(guard.staff.practiceId, "vitals");
+  await audit({
+    action: "vitals.recorded",
+    actorId: guard.session.sub,
+    actorRole: guard.session.role,
+    resourceType: "vitals",
+    resourceId: record.id,
+    patientId: appointment.patientId,
+    practiceId: guard.staff.practiceId,
+    details: { source: "NURSE", appointmentId: appointment.id },
+    request,
+  });
   return NextResponse.json({ vitals: record }, { status: 201 });
 }

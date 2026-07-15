@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requirePatient } from "@/lib/session";
 import { notify } from "@/lib/notify";
 import { publishPracticeEvent } from "@/lib/events";
+import { audit } from "@/lib/audit";
 import { resolveBooking, ACTIVE_APPOINTMENT_STATUSES } from "@/lib/slots";
 
 export const dynamic = "force-dynamic";
@@ -126,6 +127,16 @@ export async function POST(request: Request) {
   }
 
   publishPracticeEvent(practiceId, "appointments");
+  await audit({
+    action: "appointment.booked",
+    actorId: guard.session.sub,
+    actorRole: "PATIENT",
+    resourceType: "appointment",
+    resourceId: created.id,
+    patientId: guard.patient.id,
+    practiceId,
+    request,
+  });
   await notify({
     userId: guard.session.sub,
     type: "BOOKING_REQUESTED",

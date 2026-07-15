@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requirePatient } from "@/lib/session";
 import { publishPracticeEvent } from "@/lib/events";
+import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -42,5 +43,15 @@ export async function PATCH(
     data: { status: "CANCELLED", cancelReason: "Cancelled by patient" },
   });
   publishPracticeEvent(appointment.practiceId, "appointments");
+  await audit({
+    action: "appointment.cancelled_by_patient",
+    actorId: guard.session.sub,
+    actorRole: "PATIENT",
+    resourceType: "appointment",
+    resourceId: id,
+    patientId: guard.patient.id,
+    practiceId: appointment.practiceId,
+    request,
+  });
   return NextResponse.json({ appointment: updated });
 }

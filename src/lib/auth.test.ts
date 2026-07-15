@@ -38,7 +38,7 @@ describe("password hashing", () => {
 
 describe("session tokens", () => {
   it("round-trips a valid token", () => {
-    const token = createSessionToken({ sub: "user1", role: "PATIENT" });
+    const token = createSessionToken({ sub: "user1", role: "PATIENT", sid: "sess1" });
     const payload = verifySessionToken(token);
     expect(payload).not.toBeNull();
     expect(payload!.sub).toBe("user1");
@@ -46,7 +46,7 @@ describe("session tokens", () => {
   });
 
   it("rejects a tampered token", () => {
-    const token = createSessionToken({ sub: "user1", role: "PATIENT" });
+    const token = createSessionToken({ sub: "user1", role: "PATIENT", sid: "sess1" });
     const [body] = token.split(".");
     const forged = Buffer.from(
       JSON.stringify({ sub: "user1", role: "DOCTOR", exp: 9999999999 }),
@@ -60,7 +60,7 @@ describe("session tokens", () => {
   it("rejects an expired token", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
-    const token = createSessionToken({ sub: "u", role: "NURSE" }, 60);
+    const token = createSessionToken({ sub: "u", role: "NURSE", sid: "sess2" }, 60);
     vi.setSystemTime(new Date("2026-01-01T00:02:00Z"));
     expect(verifySessionToken(token)).toBeNull();
   });

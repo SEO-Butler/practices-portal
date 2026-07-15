@@ -2,16 +2,22 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { createSessionToken, hashPassword, SESSION_COOKIE } from "@/lib/auth";
-import { sessionCookieOptions } from "@/lib/session";
+import { sessionCookieOptions, createDbSession } from "@/lib/session";
 import { EMAIL_RE, validPassword } from "@/lib/clinic";
 import { issueEmailToken } from "@/lib/email-tokens";
 import { appUrl } from "@/lib/notify";
+import { registerLimiter, tooManyRequests } from "@/lib/rate-limit";
+import { audit, requestMeta } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
 // Patient self-registration. Staff accounts are created by a manager via
 // /api/manager/staff, never here.
 export async function POST(request: Request) {
+  const ip = requestMeta(request).ip ?? "unknown";
+  const check = registerLimiter().check(`ip:${ip}`);
+  if (!check.allowed) return tooManyRequests(check.retryAfterSec);
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -63,9 +69,22 @@ export async function POST(request: Request) {
   // simulated); registration itself never blocks on it.
   await issueEmailToken(user, "VERIFY", appUrl(request));
 
-  const token = createSessionToken({ sub: user.id, role: "PATIENT" });
+  const session = await createDbSession(user.id, request);
+  const token = createSessionToken({
+    sub: user.id,
+    role: "PATIENT",
+    sid: session.id,
+  });
   const store = await cookies();
   store.set(SESSION_COOKIE, token, sessionCookieOptions());
+
+  await audit({
+    action: "auth.register",
+    actorId: user.id,
+    actorEmail: user.email,
+    actorRole: "PATIENT",
+    request,
+  });
 
   return NextResponse.json({ role: "PATIENT", home: "/patient" }, { status: 201 });
 }

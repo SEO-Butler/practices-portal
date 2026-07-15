@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireStaff } from "@/lib/session";
 import { hashPassword } from "@/lib/auth";
 import { EMAIL_RE, validPassword } from "@/lib/clinic";
+import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -95,5 +96,15 @@ export async function POST(request: Request) {
     },
   });
 
+  await audit({
+    action: "staff.created",
+    actorId: guard.session.sub,
+    actorRole: "MANAGER",
+    resourceType: "user",
+    resourceId: user.id,
+    practiceId: guard.staff.practiceId,
+    details: { email, role },
+    request,
+  });
   return NextResponse.json({ staff: user }, { status: 201 });
 }

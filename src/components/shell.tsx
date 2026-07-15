@@ -27,6 +27,7 @@ const NAV: Partial<Record<SessionRole, Array<{ href: string; label: string }>>> 
   MANAGER: [
     { href: "/manager", label: "Overview" },
     { href: "/reception", label: "Front desk" },
+    { href: "/manager/audit", label: "Audit log" },
     { href: "/waiting-room", label: "Waiting room" },
   ],
 };

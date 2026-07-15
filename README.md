@@ -32,6 +32,16 @@ A medical practice management web app — PWA-enabled and fully responsive.
 - **PWA**: installable (manifest + icons), service worker with offline
   fallback; live data stays network-first.
 
+- **Audit logging**: append-only trail (no FKs — entries outlive actors) of
+  clinical chart views, all appointment/case/vitals/profile mutations and
+  auth events, with actor, patient, IP and user agent. Managers browse it
+  practice-scoped at `/manager/audit`.
+- **Hardened sessions**: server-side revocable sessions behind the signed
+  cookie (logout revokes; password change signs out other devices; reset
+  signs out everywhere; "Sign out everywhere else" in account settings),
+  login/reset/register rate limiting, cross-origin write rejection via
+  `src/proxy.ts`, and baseline security headers.
+
 ## Stack
 
 Next.js (App Router) · Prisma 7 + PostgreSQL · Tailwind CSS 4 · Vitest.

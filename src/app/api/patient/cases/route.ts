@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requirePatient } from "@/lib/session";
 import { parseVitals } from "@/lib/clinic";
+import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -98,5 +99,15 @@ export async function POST(request: Request) {
     include: { vitals: true },
   });
 
+  await audit({
+    action: "case.created",
+    actorId: guard.session.sub,
+    actorRole: "PATIENT",
+    resourceType: "case",
+    resourceId: created.id,
+    patientId: guard.patient.id,
+    details: { withVitals: created.vitals.length > 0 },
+    request,
+  });
   return NextResponse.json({ case: created }, { status: 201 });
 }

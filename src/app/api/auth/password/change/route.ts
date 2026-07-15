@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { getSession, revokeUserSessions } from "@/lib/session";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { validPassword } from "@/lib/clinic";
+import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,16 @@ export async function POST(request: Request) {
   await prisma.user.update({
     where: { id: user.id },
     data: { passwordHash: hashPassword(body.newPassword), mustChangePassword: false },
+  });
+  // Changing the password signs out every other device.
+  const revoked = await revokeUserSessions(user.id, session.sid);
+  await audit({
+    action: "auth.password_changed",
+    actorId: user.id,
+    actorEmail: user.email,
+    actorRole: session.role,
+    details: { otherSessionsRevoked: revoked },
+    request,
   });
   return NextResponse.json({ ok: true });
 }

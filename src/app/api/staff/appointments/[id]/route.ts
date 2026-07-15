@@ -4,6 +4,7 @@ import { requireStaff } from "@/lib/session";
 import { STAFF_ROLES } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { publishPracticeEvent } from "@/lib/events";
+import { audit } from "@/lib/audit";
 import {
   ACTION_TO,
   canPerformAction,
@@ -61,6 +62,20 @@ export async function GET(
         take: 100,
       })
     : [];
+
+  // Clinical chart access is always recorded.
+  if (clinical) {
+    await audit({
+      action: "chart.view",
+      actorId: guard.session.sub,
+      actorRole: guard.session.role,
+      resourceType: "appointment",
+      resourceId: appointment.id,
+      patientId: appointment.patientId,
+      practiceId: guard.staff.practiceId,
+      request: _request,
+    });
+  }
 
   return NextResponse.json({ appointment, clinical, patientVitals });
 }
@@ -137,6 +152,17 @@ export async function PATCH(
       });
     });
     publishPracticeEvent(guard.staff.practiceId, "appointments");
+    await audit({
+      action: "appointment.check_in",
+      actorId: guard.session.sub,
+      actorRole: guard.session.role,
+      resourceType: "appointment",
+      resourceId: id,
+      patientId: appointment.patientId,
+      practiceId: guard.staff.practiceId,
+      details: { queueNumber: updated.queueNumber },
+      request,
+    });
     await notify({
       userId: patientUser.id,
       type: "QUEUE_CHECKED_IN",
@@ -167,6 +193,17 @@ export async function PATCH(
   });
 
   publishPracticeEvent(guard.staff.practiceId, "appointments");
+  await audit({
+    action: `appointment.${action}`,
+    actorId: guard.session.sub,
+    actorRole: guard.session.role,
+    resourceType: "appointment",
+    resourceId: id,
+    patientId: appointment.patientId,
+    practiceId: guard.staff.practiceId,
+    details: { from: appointment.status, to: updated.status },
+    request,
+  });
 
   const when = appointment.scheduledAt.toLocaleString();
   if (action === "confirm") {

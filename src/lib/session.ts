@@ -8,12 +8,79 @@ import {
 } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-/** Reads and verifies the session cookie. Null when absent/invalid. */
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+// lastSeenAt is refreshed at most this often to keep reads from writing.
+const LAST_SEEN_REFRESH_MS = 5 * 60 * 1000;
+
+/**
+ * Reads and verifies the session cookie, then checks the server-side
+ * Session row — a revoked or expired row rejects the token regardless of
+ * its signature. Null when absent/invalid.
+ */
 export async function getSession(): Promise<SessionPayload | null> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifySessionToken(token);
+  const payload = verifySessionToken(token);
+  if (!payload) return null;
+
+  const record = await prisma.session.findUnique({
+    where: { id: payload.sid },
+    select: { userId: true, revokedAt: true, expiresAt: true, lastSeenAt: true },
+  });
+  if (
+    !record ||
+    record.userId !== payload.sub ||
+    record.revokedAt ||
+    record.expiresAt < new Date()
+  ) {
+    return null;
+  }
+
+  if (Date.now() - record.lastSeenAt.getTime() > LAST_SEEN_REFRESH_MS) {
+    prisma.session
+      .update({ where: { id: payload.sid }, data: { lastSeenAt: new Date() } })
+      .catch(() => {});
+  }
+  return payload;
+}
+
+/** Creates the server-side session row for a fresh sign-in. */
+export async function createDbSession(userId: string, request?: Request) {
+  const forwarded = request?.headers.get("x-forwarded-for");
+  return prisma.session.create({
+    data: {
+      userId,
+      expiresAt: new Date(Date.now() + SESSION_TTL_SECONDS * 1000),
+      ip: forwarded ? forwarded.split(",")[0].trim() : null,
+      userAgent: request?.headers.get("user-agent")?.slice(0, 300) ?? null,
+    },
+  });
+}
+
+export async function revokeSession(sid: string): Promise<void> {
+  await prisma.session
+    .updateMany({
+      where: { id: sid, revokedAt: null },
+      data: { revokedAt: new Date() },
+    })
+    .catch(() => {});
+}
+
+/** Revokes every live session for a user except `keepSid` (pass null for all). */
+export async function revokeUserSessions(
+  userId: string,
+  keepSid: string | null,
+): Promise<number> {
+  const result = await prisma.session.updateMany({
+    where: {
+      userId,
+      revokedAt: null,
+      ...(keepSid ? { id: { not: keepSid } } : {}),
+    },
+    data: { revokedAt: new Date() },
+  });
+  return result.count;
 }
 
 export type Guard =
